@@ -106,19 +106,21 @@ func Login() gin.HandlerFunc {
 		defer cancel()
 
 		var user models.User
+		var foundUser models.User
+
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err})
 			return
 		}
 
-		err := UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&founduser)
+		err := UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
 		defer cancel()
 
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Username or password not correct"})
 		}
 
-		PasswordISValid, msg := VerifyPassword(*user.Password, *founduser.Password)
+		PasswordISValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
 
 		defer cancel()
 
@@ -127,12 +129,12 @@ func Login() gin.HandlerFunc {
 			fmt.Println(msg)
 			return
 		}
-		token, refreshToken, _ := generate.TokenGenerator(*founduser.Email, *founduser.First_Name, *founduser.Last_Name, founduser.User_ID)
+		token, refreshToken, _ := generate.TokenGenerator(*foundUser.Email, *foundUser.First_Name, *foundUser.Last_Name, foundUser.User_ID)
 		defer cancel()
 
-		generate.UpdateAllTokens(token, refreshToken, founduser.User_ID)
+		generate.UpdateAllTokens(token, refreshToken, foundUser.User_ID)
 
-		c.JSON(http.StatusFound, founduser)
+		c.JSON(http.StatusFound, foundUser)
 	}
 }
 
@@ -179,4 +181,43 @@ func SearchProduct() gin.HandlerFunc {
 
 func SearchProductByQuery() gin.HandlerFunc {
 
+	return func(c *gin.Context) {
+		var searchProduct []models.Product
+		queryParam := c.Query("name")
+
+		if queryParam == "" {
+			log.Println("query is empty")
+			c.Header("Content-Type", "application/json")
+			c.JSON(http.StatusNotFound, gin.H{"Error": "Invalid search indec"})
+			c.Abort()
+			return
+		}
+
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+
+		searchQueryDB, err := ProductCollection.Find(ctx, bson.M{"product_name": bson.M{"$regex": queryParam}})
+		if err != nil {
+			c.IndentedJSON(404, "something went wrong while fetching the data")
+			return
+		}
+
+		err = searchQueryDB.All(ctx, &searchProduct)
+		if err != nil {
+			log.Println(err)
+			c.IndentedJSON(400, "invalid")
+			return
+		}
+
+		defer searchQueryDB.Close(ctx)
+
+		if err = searchQueryDB.Err(); err != nil {
+			log.Println(err)
+			c.IndentedJSON(400, "invalid request")
+			return
+		}
+
+		defer cancel()
+		c.IndentedJSON(200, searchProduct)
+	}
 }
