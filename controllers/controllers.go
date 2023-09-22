@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 	"time"
@@ -20,11 +21,23 @@ var ProductCollection *mongo.Collection = database.ProductData(database.Client, 
 var Validate = validator.New()
 
 func HashPassword(password string) string {
-
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	if err != nil {
+		log.Panic(err)
+	}
+	return string(bytes)
 }
 
 func VerifyPassword(userPassword string, givenPassword string) (bool, string) {
+	err := bcrypt.CompareHashAndPassword([]byte(givenPassword), []byte(userPassword))
+	valid := true
+	msg := ""
 
+	if err != nil {
+		msg = "Username or password not correct"
+		valid = false
+	}
+	return valid, msg
 }
 
 func SignUp() gin.HandlerFunc {
@@ -129,6 +142,39 @@ func ProductViewerAdmin() gin.HandlerFunc {
 
 func SearchProduct() gin.HandlerFunc {
 
+	return func(c *gin.Context) {
+
+		// Initialize a slice to store the list of product
+		var productList []models.Product
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+
+		// Perform a query to retrieve all products from the database
+		cursor, err := ProductCollection.Find(ctx, bson.D{})
+		if err != nil {
+			c.IndentedJSON(http.StatusInternalServerError, "something went wrong, please try later")
+		}
+
+		// Deserialize the products from the cursor into the productList slice
+		err = cursor.All(ctx, &productList)
+
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		// Close the cursor (release resources)
+		defer cursor.Close(ctx)
+
+		if err = cursor.Err(); err != nil {
+			log.Println(err)
+			c.IndentedJSON(400, "invalid")
+			return
+		}
+		defer cancel()
+		c.IndentedJSON(200, productList)
+	}
 }
 
 func SearchProductByQuery() gin.HandlerFunc {
