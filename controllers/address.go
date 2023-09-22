@@ -33,6 +33,7 @@ func DeleteAddress() gin.HandlerFunc {
 			return
 		}
 
+		//create an address with value 0
 		addresses := make([]models.Address, 0)
 		user_id, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
@@ -47,6 +48,7 @@ func DeleteAddress() gin.HandlerFunc {
 			Value: user_id,
 		}}
 
+		//update the db with an empty address
 		update := bson.D{{Key: "$set", Value: bson.D{primitive.E{
 			Key:   "address",
 			Value: addresses}}}}

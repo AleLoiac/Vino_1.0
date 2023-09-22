@@ -117,6 +117,7 @@ func (app *Application) RemoveItem() gin.HandlerFunc {
 	}
 }
 
+// GetItemFromCart : we want to retrieve the user first, then the cart associated with it and ungroup it to see the individual values
 func GetItemFromCart() gin.HandlerFunc {
 
 }
